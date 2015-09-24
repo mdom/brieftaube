@@ -9,6 +9,16 @@ use Mail::IMAPClient;
 use Encode qw(encode decode);
 use Carp qw(carp);
 use Brieftaube::Folder;
+use Config::Tiny;
+
+my $config_file = "$ENV{HOME}/.brieftauberc";
+my $config;
+if ( -e $config_file ) {
+	$config = Config::Tiny->read( $config_file, 'utf8' );
+	die "Can't read configuration: " . Config::Tiny->errstr . "\n"
+		unless $config;
+}
+my ($username,$server,$password) = @{$config->{_}}{qw(username server password)};
 
 my $curses = Curses->new();
 noecho();
@@ -43,11 +53,13 @@ sub info {
     return;
 }
 
-my $password = prompt( $win_prompt, 'Password', 1 );
+$username = prompt( $win_prompt, 'Username' ) unless $username;
+$server   = prompt( $win_prompt, 'Server' )   unless $server;
+$password = prompt( $win_prompt, 'Password', 1 ) unless $password;
 
 my $imap = Mail::IMAPClient->new(
-    Server   => 'imap.example.com',
-    User     => 'bill',
+    Server   => $server,
+    User     => $username,
     Password => $password,
     Ssl      => 1,
     Uid      => 1,
