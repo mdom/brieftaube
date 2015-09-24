@@ -63,11 +63,6 @@ my $folder =
 
 $folder->display_page;
 
-$win_index->move(  0, 0 );
-$win_index->chgat( -1, A_STANDOUT, 0, 0 );
-$win_index->touchwin();
-$win_index->refresh();
-
 while (1) {
 
     $win_index->getyx( my ( $pos_y, $pos_x ) );

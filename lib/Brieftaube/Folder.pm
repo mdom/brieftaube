@@ -6,6 +6,7 @@ use String::Format qw(stringf);
 use Data::Page;
 use Mail::IMAPClient::BodyStructure;
 use Encode qw(encode decode);
+use Curses;
 
 has 'folder' => ( is => 'ro', required => 1 );
 has 'imap'   => ( is => 'ro', required => 1 );
@@ -50,12 +51,13 @@ sub display_page {
     my $self = shift;
     $self->win->getmaxyx( my ( $lines, $cols ) );
     $self->win->erase;
-    $self->win->move(0,0);
+    $self->win->move( 0, 0 );
     for my $uid ( $self->page->splice( $self->uids ) ) {
         my $line = $self->_format_index_line($uid);
-        $self->win->addstring( substr($line,0,$cols - 1 )."\n");
+        $self->win->addstring( substr( $line, 0, $cols - 1 ) . "\n" );
     }
-    $self->win->move(0,0);
+    $self->win->move( 0, 0 );
+    $self->win->chgat( -1, A_STANDOUT, 0, 0 );
     $self->win->refresh();
     return;
 }
