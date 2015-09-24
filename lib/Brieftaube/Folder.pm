@@ -85,6 +85,20 @@ sub display_next_page {
     return;
 }
 
+sub display_first_page {
+    my $self = shift;
+    $self->page->current_page(1);
+    $self->display_page();
+    return;
+}
+
+sub display_last_page {
+    my $self = shift;
+    $self->page->current_page( $self->page->last_page );
+    $self->display_page(-1);
+    return;
+}
+
 sub _format_index_line {
     my ( $self, $uid ) = @_;
     my $env = Mail::IMAPClient::BodyStructure::Envelope->parse_string(
