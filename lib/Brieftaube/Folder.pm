@@ -51,7 +51,7 @@ sub display_page {
         $self->win->addstring( substr( $line, 0, $cols - 1 ) . "\n" );
     }
     if ( $highlight == -1 ) {
-        $self->win->move( $lines - 1, 0 );
+        $self->win->move( $self->page->entries_on_this_page - 1, 0 );
     }
     else {
         $self->win->move( 0, 0 );
