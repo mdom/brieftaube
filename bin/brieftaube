@@ -31,28 +31,6 @@ my $win_prompt = newwin( 1,          $columns, $lines - 1, 0 );
 
 $win_index->keypad(1);
 
-sub prompt {
-    my ( $win, $prompt, $noecho ) = @_;
-    echo() unless $noecho;
-    $win->move(0,0);
-    $win->clrtoeol;
-    $win->addstring( 0,0, "$prompt: " );
-    my $answer = $win->getstring();
-    $win->move(0,0);
-    $win->clrtoeol;
-    $win->refresh;
-    noecho();
-    return $answer;
-}
-
-sub info {
-    $win_prompt->move(0,0);
-    $win_prompt->clrtoeol;
-    $win_prompt->addstring( ''.$_[0] );
-    $win_prompt->refresh();
-    return;
-}
-
 $username = prompt( $win_prompt, 'Username' ) unless $username;
 $server   = prompt( $win_prompt, 'Server' )   unless $server;
 $password = prompt( $win_prompt, 'Password', 1 ) unless $password;
@@ -150,4 +128,26 @@ sub dd {
     endwin();
     warn "$@\n";
     die Dumper( $_[0] );
+}
+
+sub prompt {
+    my ( $win, $prompt, $noecho ) = @_;
+    echo() unless $noecho;
+    $win->move(0,0);
+    $win->clrtoeol;
+    $win->addstring( 0,0, "$prompt: " );
+    my $answer = $win->getstring();
+    $win->move(0,0);
+    $win->clrtoeol;
+    $win->refresh;
+    noecho();
+    return $answer;
+}
+
+sub info {
+    $win_prompt->move(0,0);
+    $win_prompt->clrtoeol;
+    $win_prompt->addstring( ''.$_[0] );
+    $win_prompt->refresh();
+    return;
 }
