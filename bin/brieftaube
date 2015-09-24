@@ -87,6 +87,12 @@ while (1) {
             $folder->display_prev_page;
 	}
     }
+    elsif ( $char eq KEY_NPAGE ) {
+	    $folder->display_next_page;
+    }
+    elsif ( $char eq KEY_PPAGE ) {
+	    $folder->display_prev_page;
+    }
     elsif ( $char eq KEY_ENTER ) {
         ...;
     }

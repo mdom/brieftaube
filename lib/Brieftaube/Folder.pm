@@ -67,6 +67,9 @@ sub display_prev_page {
         $self->page->current_page( $self->page->previous_page );
         $self->display_page(-1);
     }
+    else {
+        $self->display_page();
+    }
     return;
 }
 
@@ -75,6 +78,9 @@ sub display_next_page {
     if ( $self->page->last_page != $self->page->current_page ) {
         $self->page->current_page( $self->page->next_page );
         $self->display_page();
+    }
+    else {
+        $self->display_page(-1);
     }
     return;
 }
