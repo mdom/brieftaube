@@ -39,16 +39,10 @@ sub _build_bodystructure {
         'ENVELOPE', 'BODYSTRUCTURE' );
 }
 
-sub next_page {
-    return $_[0]->page->current_page( $_[0]->page->next_page );
-}
-
-sub prev_page {
-    return $_[0]->page->current_page( $_[0]->page->prev_page );
-}
 
 sub display_page {
-    my $self = shift;
+    my ( $self, $highlight ) = @_;
+    $highlight ||= 0;
     $self->win->getmaxyx( my ( $lines, $cols ) );
     $self->win->erase;
     $self->win->move( 0, 0 );
@@ -56,9 +50,32 @@ sub display_page {
         my $line = $self->_format_index_line($uid);
         $self->win->addstring( substr( $line, 0, $cols - 1 ) . "\n" );
     }
-    $self->win->move( 0, 0 );
+    if ( $highlight == -1 ) {
+        $self->win->move( $lines - 1, 0 );
+    }
+    else {
+        $self->win->move( 0, 0 );
+    }
     $self->win->chgat( -1, A_STANDOUT, 0, 0 );
     $self->win->refresh();
+    return;
+}
+
+sub display_prev_page {
+    my $self = shift;
+    if ( $self->page->first_page != $self->page->current_page ) {
+        $self->page->current_page( $self->page->previous_page );
+        $self->display_page(-1);
+    }
+    return;
+}
+
+sub display_next_page {
+    my $self = shift;
+    if ( $self->page->last_page != $self->page->current_page ) {
+        $self->page->current_page( $self->page->next_page );
+        $self->display_page();
+    }
     return;
 }
 
