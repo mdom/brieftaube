@@ -122,7 +122,7 @@ sub move_cursor {
     my $next_pos = $pos_y + $move;
     return if $next_pos < 0 || $next_pos > $max_x - 1;
     $win->chgat( -1, A_NORMAL, 0, 0 );
-    $win->move( $pos_y + $move, 0 );
+    $win->move( $next_pos, 0 );
     $win->chgat( -1, A_STANDOUT, 0, 0 );
     return;
 }
