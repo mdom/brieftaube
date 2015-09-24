@@ -1,0 +1,132 @@
+#!/usr/bin/perl
+
+package Brieftaube;
+use strict;
+use warnings;
+use lib 'lib';
+use Curses;
+use Mail::IMAPClient;
+use Encode qw(encode decode);
+use Carp qw(carp);
+use Brieftaube::Folder;
+
+my $curses = Curses->new();
+noecho();
+curs_set(0);
+start_color();
+
+$curses->getmaxyx( my ( $lines, $columns ) );
+my $win_index  = newwin( $lines - 1, $columns, 0,          0 );
+my $win_prompt = newwin( 1,          $columns, $lines - 1, 0 );
+
+$win_index->keypad(1);
+
+sub prompt {
+    my ( $win, $prompt, $noecho ) = @_;
+    echo() unless $noecho;
+    $win->move(0,0);
+    $win->clrtoeol;
+    $win->addstring( 0,0, "$prompt: " );
+    my $answer = $win->getstring();
+    $win->move(0,0);
+    $win->clrtoeol;
+    $win->refresh;
+    noecho();
+    return $answer;
+}
+
+sub info {
+    $win_prompt->move(0,0);
+    $win_prompt->clrtoeol;
+    $win_prompt->addstring( ''.$_[0] );
+    $win_prompt->refresh();
+    return;
+}
+
+my $password = prompt( $win_prompt, 'Password', 1 );
+
+my $imap = Mail::IMAPClient->new(
+    Server   => 'imap.example.com',
+    User     => 'bill',
+    Password => $password,
+    Ssl      => 1,
+    Uid      => 1,
+);
+
+boom("Can't connect to imap server!\n") unless $imap;
+
+my $folders = $imap->folders
+  or boom( "List folders error: ", $imap->LastError, "\n" );
+
+my $folder =
+  Brieftaube::Folder->new( folder => 'INBOX', imap => $imap, win => $win_index );
+
+$folder->display_page;
+
+$win_index->move(  0, 0 );
+$win_index->chgat( -1, A_STANDOUT, 0, 0 );
+$win_index->touchwin();
+$win_index->refresh();
+
+while (1) {
+
+    $win_index->getyx( my ( $pos_y, $pos_x ) );
+    my $entries = $folder->entries_on_this_page;
+    info("Pos y : " . $pos_y . " Entries: $entries");
+
+    my $char = $win_index->getch();
+
+    if ( $char eq KEY_DOWN ) {
+        if ( $pos_y < $entries - 1 ) {
+            move_cursor($win_index,1);
+        }
+        elsif ( $pos_y + 1 == $folder->page->entries_per_page && $folder->page->current_page != $folder->page->last_page) {
+            $folder->next_page;
+            $folder->display_page;
+        }
+    }
+    elsif ( $char eq KEY_UP ) {
+        if ( $pos_y > 0 ) {
+            move_cursor($win_index,-1);
+        }
+    }
+    elsif ( $char eq KEY_ENTER ) {
+        ...;
+    }
+    elsif ( $char eq 'c' ) {
+        my $new_folder = prompt( $win_prompt, "Folder" );
+	$folder = Brieftaube::Folder->new( folder => $new_folder, imap => $imap, win => $win_index );
+	$folder->display_page();
+    }
+    elsif ( $char eq 'q' ) {
+        endwin;
+        exit 0;
+    }
+    $win_index->refresh();
+}
+endwin;
+exit 0;
+
+sub boom {
+    endwin();
+    die @_;
+}
+
+sub move_cursor {
+    my ( $win, $move ) = @_;
+    $win->getyx( my ( $pos_y, $pos_x ) );
+    $win->getmaxyx( my ( $max_y, $max_x ) );
+    my $next_pos = $pos_y + $move;
+    return if $next_pos < 0 || $next_pos > $max_x - 1;
+    $win->chgat( -1, A_NORMAL, 0, 0 );
+    $win->move( $pos_y + $move, 0 );
+    $win->chgat( -1, A_STANDOUT, 0, 0 );
+    return;
+}
+
+sub dd {
+    use Data::Dumper;
+    endwin();
+    warn "$@\n";
+    die Dumper( $_[0] );
+}
