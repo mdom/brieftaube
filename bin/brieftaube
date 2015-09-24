@@ -47,7 +47,7 @@ my $imap = Mail::IMAPClient->new(
     Uid      => 1,
 );
 
-boom("Can't connect to imap server!\n") unless $imap;
+boom("Can't connect to imap server: $@\n") unless $imap;
 
 my $folders = $imap->folders
   or boom( "List folders error: ", $imap->LastError, "\n" );
