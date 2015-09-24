@@ -35,6 +35,10 @@ $username = prompt( $win_prompt, 'Username' ) unless $username;
 $server   = prompt( $win_prompt, 'Server' )   unless $server;
 $password = prompt( $win_prompt, 'Password', 1 ) unless $password;
 
+boom("Can't connect unless server is supplied.\n")   unless $server;
+boom("Can't connect unless username is supplied.\n") unless $username;
+boom("Can't connect unless password is supplied.\n") unless $password;
+
 my $imap = Mail::IMAPClient->new(
     Server   => $server,
     User     => $username,
