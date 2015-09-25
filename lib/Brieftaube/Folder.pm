@@ -112,6 +112,7 @@ sub _format_index_line {
       ? $from->personalname
       : $from->mailboxname . '@' . $from->hostname;
     $header{from} = decode( 'MIME-HEADER', $from );
+    $header{subject} = $header{subject} eq 'NIL' ? '' : $header{subject};
     my %formats = map { lc( substr( $_, 0, 1 ) ) => $header{$_} } keys %header;
     return stringf( $self->index_format, %formats );
 }
