@@ -46,10 +46,12 @@ sub display_page {
     $self->win->getmaxyx( my ( $lines, $cols ) );
     $self->win->erase;
     $self->win->move( 0, 0 );
+    my $page = '';
     for my $uid ( $self->page->splice( $self->uids ) ) {
         my $line = $self->_format_index_line($uid);
-        $self->win->addstring( substr( $line, 0, $cols - 1 ) . "\n" );
+        $page .= substr( $line, 0, $cols - 1 ) . "\n";
     }
+    $self->win->addstring( $page );
     if ( $highlight == -1 ) {
         $self->win->move( $self->page->entries_on_this_page - 1, 0 );
     }
