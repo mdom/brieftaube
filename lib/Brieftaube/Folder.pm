@@ -7,6 +7,7 @@ use Data::Page;
 use Mail::IMAPClient::BodyStructure;
 use Encode qw(encode decode);
 use Time::Piece;
+use Date::Parse 'str2time';
 use Curses;
 
 has 'folder' => ( is => 'ro', required => 1 );
@@ -119,8 +120,7 @@ sub _format_index_line {
     my %formats = map { lc( substr( $_, 0, 1 ) ) => $header{$_} } keys %header;
     $formats{d} = sub {
         my $format = $_[0] || '%F %H:%M';
-        Time::Piece->strptime( $header{date}, '%a, %d %b %Y %H:%M:%S %z' )
-          ->strftime($format);
+	Time::Piece->new(str2time($header{date}))->strftime($format);
     };
     return stringf( $self->index_format, %formats );
 }
