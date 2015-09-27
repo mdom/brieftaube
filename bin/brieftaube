@@ -104,6 +104,7 @@ while (1) {
                 if ( get_type($part) eq 'text/plain' ) {
                     my $body = decode_mail( $imap, $uid, $part );
                     display_mail($body);
+		    last;
                 }
             }
         }
