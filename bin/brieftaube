@@ -31,6 +31,7 @@ start_color();
 $curses->getmaxyx( my ( $lines, $columns ) );
 my $win_index  = newwin( $lines - 1, $columns, 0,          0 );
 my $win_mail   = newwin( $lines - 1, $columns, 0,          0 );
+my $win_debug  = newwin( $lines - 1, $columns, 0,          0 );
 my $win_prompt = newwin( 1,          $columns, $lines - 1, 0 );
 
 $win_index->keypad(1);
@@ -195,7 +196,18 @@ sub move_cursor {
 }
 
 sub dd {
+    my ( $ds, $old_win ) = @_;
     use Data::Dumper;
+    $win_debug->erase;
+    my $dump = Dumper($ds);
+    $dump =~ s/\r\n/\n/smxg;
+    $win_debug->addstring( 0, 0, $dump );
+    $win_debug->getch();
+    if ($old_win) {
+        $old_win->touchwin;
+        $old_win->refresh;
+    }
+    return;
 }
 
 sub prompt {
