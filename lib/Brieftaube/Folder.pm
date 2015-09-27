@@ -41,6 +41,12 @@ sub _build_bodystructure {
         'ENVELOPE', 'BODYSTRUCTURE' );
 }
 
+sub current_uid {
+	my $self = shift;
+	$self->win->getyx(my($pos_y,$pos_x));
+	my @uids = $self->page->splice($self->uids);
+	return $uids[$pos_y];
+}
 
 sub display_page {
     my ( $self, $highlight ) = @_;

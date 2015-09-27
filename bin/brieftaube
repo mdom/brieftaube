@@ -10,6 +10,8 @@ use Encode qw(encode decode);
 use Carp qw(carp);
 use Brieftaube::Folder;
 use Config::Tiny;
+use MIME::QuotedPrint;
+use MIME::Base64;
 
 my $config_file = "$ENV{HOME}/.brieftauberc";
 my $config;
@@ -27,6 +29,7 @@ start_color();
 
 $curses->getmaxyx( my ( $lines, $columns ) );
 my $win_index  = newwin( $lines - 1, $columns, 0,          0 );
+my $win_mail   = newwin( $lines - 1, $columns, 0,          0 );
 my $win_prompt = newwin( 1,          $columns, $lines - 1, 0 );
 
 $win_index->keypad(1);
@@ -92,8 +95,26 @@ while (1) {
     elsif ( $char eq KEY_PPAGE ) {
 	    $folder->display_prev_page;
     }
-    elsif ( $char eq KEY_ENTER ) {
-        ...;
+    elsif ( $char eq "\n" ) {
+        my $uid  = $folder->current_uid;
+        my $part = $imap->get_bodystructure($uid);
+        if ( lc( $part->bodytype ) eq 'multipart' ) {
+            my @parts = $part->bodystructure();
+            for my $part (@parts) {
+                if ( get_type($part) eq 'text/plain' ) {
+                    my $body = decode_mail( $imap, $uid, $part );
+                    display_mail($body);
+                }
+            }
+        }
+        elsif ( get_type($part) eq 'text/plain' ) {
+            my $body = $imap->bodypart_string( $uid, $part->id );
+            $body = decode_qp($body);
+            $body = decode( 'utf8', $body );
+            display_mail($body);
+        }
+        $win_index->touchwin;
+        $win_index->refresh();
     }
     elsif ( $char eq 'c' ) {
         my $new_folder = prompt( $win_prompt, "Folder" );
@@ -108,6 +129,44 @@ while (1) {
 }
 endwin;
 exit 0;
+
+sub decode_mail {
+    my ( $imap, $uid, $part ) = @_;
+    my $body     = $imap->bodypart_string( $uid, $part->id );
+    my $encoding = $part->bodyenc;
+    my %decoder  = (
+        'quoted-printable' => \&decode_qp,
+        'base64'           => \&decode_base64,
+    );
+    if ($encoding) {
+        if ( exists $decoder{$encoding} ) {
+            $body = $decoder{$encoding}->($body);
+        }
+        else {
+            boom("Can't decode mail: Unknown encoding $encoding.\n");
+        }
+    }
+    my $charset = $part->bodyparms->{charset};
+    if ($charset) {
+        $body = decode( $charset, $body );
+    }
+    return $body;
+}
+
+sub display_mail {
+    my $text = shift;
+    $win_mail->erase;
+    $win_mail->scrollok();
+    $win_mail->addstring( 0, 0, $text );
+    $win_mail->getch();
+    $win_index->touchwin;
+    $win_index->refresh;
+}
+
+sub get_type {
+    my $part = shift;
+    return lc( $part->bodytype . '/' . $part->bodysubtype );
+}
 
 sub boom {
     endwin();
