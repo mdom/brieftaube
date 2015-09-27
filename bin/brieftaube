@@ -48,8 +48,9 @@ my $imap = Mail::IMAPClient->new(
     Server   => $server,
     User     => $username,
     Password => $password,
-    Ssl      => 1,
     Uid      => 1,
+    $config->{_}->{ssl}      ? ( Ssl      => 1 ) : (),
+    $config->{_}->{starttls} ? ( Starttls => 1 ) : (),
 );
 
 boom("Can't connect to imap server: $@\n") unless $imap;
