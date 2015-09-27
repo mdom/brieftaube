@@ -23,6 +23,10 @@ if ( -e $config_file ) {
 my ( $username, $server, $password ) =
   @{ $config->{_} }{qw(username server password)};
 
+if ( not exists $config->{_}->{starttls} and not exists $config->{_}->{ssl} ) {
+    $config->{_}->{starttls} = 1;
+}
+
 my $curses = Curses->new();
 noecho();
 curs_set(0);
