@@ -106,24 +106,14 @@ while (1) {
         $folder->display_prev_page;
     }
     elsif ( $char eq "\n" ) {
-        my $uid  = $folder->current_uid;
-        my $part = $imap->get_bodystructure($uid);
-        if ( lc( $part->bodytype ) eq 'multipart' ) {
-            my @parts = $part->bodystructure();
-            for my $part (@parts) {
-                if ( get_type($part) eq 'text/plain' ) {
-                    my $body = decode_mail( $imap, $uid, $part );
-                    display_mail($body);
-		    last;
-                }
-            }
+        my $uid = $folder->current_uid;
+        if ( not defined $uid ) {
+            boom("Selected mail does not exist on server anymore");
         }
-        elsif ( get_type($part) eq 'text/plain' ) {
-            my $body = $imap->bodypart_string( $uid, $part->id );
-            $body = decode_qp($body);
-            $body = decode( 'utf8', $body );
-            display_mail($body);
-        }
+        my $part      = $imap->get_bodystructure($uid);
+        my $text_part = find_plain_text_part($part);
+        my $body      = decode_mail( $imap, $uid, $text_part );
+        display_mail($body);
         $win_index->touchwin;
         $win_index->refresh();
     }
@@ -144,6 +134,22 @@ while (1) {
 }
 endwin;
 exit 0;
+
+sub find_plain_text_part {
+    my $part = shift;
+    if ( lc( $part->bodytype ) eq 'multipart' ) {
+        my @parts = $part->bodystructure();
+        for my $part (@parts) {
+            if ( get_type($part) eq 'text/plain' ) {
+                return $part;
+            }
+        }
+    }
+    elsif ( get_type($part) eq 'text/plain' ) {
+        return $part;
+    }
+    return;
+}
 
 sub decode_mail {
     my ( $imap, $uid, $part ) = @_;
