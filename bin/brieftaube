@@ -16,11 +16,12 @@ use MIME::Base64;
 my $config_file = "$ENV{HOME}/.brieftauberc";
 my $config;
 if ( -e $config_file ) {
-	$config = Config::Tiny->read( $config_file, 'utf8' );
-	die "Can't read configuration: " . Config::Tiny->errstr . "\n"
-		unless $config;
+    $config = Config::Tiny->read( $config_file, 'utf8' );
+    die "Can't read configuration: " . Config::Tiny->errstr . "\n"
+      unless $config;
 }
-my ($username,$server,$password) = @{$config->{_}}{qw(username server password)};
+my ( $username, $server, $password ) =
+  @{ $config->{_} }{qw(username server password)};
 
 my $curses = Curses->new();
 noecho();
@@ -55,8 +56,11 @@ boom("Can't connect to imap server: $@\n") unless $imap;
 my $folders = $imap->folders
   or boom( "List folders error: ", $imap->LastError, "\n" );
 
-my $folder =
-  Brieftaube::Folder->new( folder => 'INBOX', imap => $imap, win => $win_index );
+my $folder = Brieftaube::Folder->new(
+    folder => 'INBOX',
+    imap   => $imap,
+    win    => $win_index
+);
 
 $folder->display_page;
 
@@ -69,7 +73,7 @@ while (1) {
 
     if ( $char eq KEY_DOWN ) {
         if ( $pos_y < $entries - 1 ) {
-            move_cursor($win_index,1);
+            move_cursor( $win_index, 1 );
         }
         elsif ( $pos_y + 1 == $folder->page->entries_per_page ) {
             $folder->display_next_page;
@@ -77,23 +81,23 @@ while (1) {
     }
     elsif ( $char eq KEY_UP ) {
         if ( $pos_y > 0 ) {
-            move_cursor($win_index,-1);
+            move_cursor( $win_index, -1 );
         }
-	elsif ( $pos_y == 0 ) {
+        elsif ( $pos_y == 0 ) {
             $folder->display_prev_page;
-	}
+        }
     }
     elsif ( $char eq KEY_NPAGE ) {
-	    $folder->display_next_page;
+        $folder->display_next_page;
     }
     elsif ( $char eq KEY_HOME ) {
-	    $folder->display_first_page;
+        $folder->display_first_page;
     }
     elsif ( $char eq KEY_END ) {
-	    $folder->display_last_page;
+        $folder->display_last_page;
     }
     elsif ( $char eq KEY_PPAGE ) {
-	    $folder->display_prev_page;
+        $folder->display_prev_page;
     }
     elsif ( $char eq "\n" ) {
         my $uid  = $folder->current_uid;
@@ -119,8 +123,12 @@ while (1) {
     }
     elsif ( $char eq 'c' ) {
         my $new_folder = prompt( $win_prompt, "Folder" );
-	$folder = Brieftaube::Folder->new( folder => $new_folder, imap => $imap, win => $win_index );
-	$folder->display_page();
+        $folder = Brieftaube::Folder->new(
+            folder => $new_folder,
+            imap   => $imap,
+            win    => $win_index
+        );
+        $folder->display_page();
     }
     elsif ( $char eq 'q' ) {
         endwin;
@@ -188,19 +196,16 @@ sub move_cursor {
 
 sub dd {
     use Data::Dumper;
-    endwin();
-    warn "$@\n";
-    die Dumper( $_[0] );
 }
 
 sub prompt {
     my ( $win, $prompt, $noecho ) = @_;
     echo() unless $noecho;
-    $win->move(0,0);
+    $win->move( 0, 0 );
     $win->clrtoeol;
-    $win->addstring( 0,0, "$prompt: " );
+    $win->addstring( 0, 0, "$prompt: " );
     my $answer = $win->getstring();
-    $win->move(0,0);
+    $win->move( 0, 0 );
     $win->clrtoeol;
     $win->refresh;
     noecho();
@@ -208,9 +213,9 @@ sub prompt {
 }
 
 sub info {
-    $win_prompt->move(0,0);
+    $win_prompt->move( 0, 0 );
     $win_prompt->clrtoeol;
-    $win_prompt->addstring( ''.$_[0] );
+    $win_prompt->addstring( '' . $_[0] );
     $win_prompt->refresh();
     return;
 }
