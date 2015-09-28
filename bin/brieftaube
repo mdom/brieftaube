@@ -7,7 +7,6 @@ use lib 'lib';
 use Curses;
 use Mail::IMAPClient;
 use Encode qw(encode decode);
-use Carp qw(carp);
 use Brieftaube::Folder;
 use Config::Tiny;
 use MIME::QuotedPrint;
@@ -59,8 +58,6 @@ my $imap = Mail::IMAPClient->new(
 
 boom("Can't connect to imap server: $@\n") unless $imap;
 
-my $folders = $imap->folders
-  or boom( "List folders error: ", $imap->LastError, "\n" );
 
 my $folder = Brieftaube::Folder->new(
     folder => 'INBOX',
