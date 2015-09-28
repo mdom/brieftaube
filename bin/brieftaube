@@ -185,7 +185,9 @@ sub display_mail {
     my $text = shift;
     $win_mail->erase;
     $win_mail->scrollok();
-    $win_mail->addstring( 0, 0, $text );
+    $text =~ s/\r\n/\n/smxg;
+    $win_mail->addstr( 0, 0, encode( 'utf8', $text ) );
+    $win_mail->refresh();
     $win_mail->getch();
     $win_index->touchwin;
     $win_index->refresh;
