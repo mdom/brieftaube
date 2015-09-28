@@ -7,7 +7,8 @@ use lib 'lib';
 use Curses;
 use Mail::IMAPClient;
 use Encode qw(encode decode);
-use Brieftaube::Folder;
+use Brieftaube::FolderView;
+use Brieftaube::Pager;
 use Config::Tiny;
 use MIME::QuotedPrint;
 use MIME::Base64;
@@ -58,52 +59,62 @@ my $imap = Mail::IMAPClient->new(
 
 boom("Can't connect to imap server: $@\n") unless $imap;
 
+my $cache = {};
 
-my $folder = Brieftaube::Folder->new(
-    folder => 'INBOX',
-    imap   => $imap,
-    win    => $win_index
-);
+sub change_folder {
+    my ( $imap, $folder ) = @_;
+    $imap->select($folder);
+    $win_index->getmaxyx( my ( $max_y, $max_x ) );
+    my @uids = $imap->sort( 'DATE', 'UTF-8', 'ALL' );
+    my $pager = Brieftaube::Pager->new(
+        array     => \@uids,
+        page_size => $max_y,
+    );
+    cache_uids( $cache, $imap, @uids );
+    my $folder_view = Brieftaube::FolderView->new(
+        win   => $win_index,
+        imap  => $imap,
+        pager => $pager,
+        cache => $cache->{ folder_prefix($imap) },
+    );
+    return $folder_view;
+}
 
-$folder->display_page;
+sub folder_prefix {
+    my $imap = shift;
+    my ( $user, $server, $uidvalidity ) =
+      ( $imap->User, $imap->Server, $imap->uidvalidity( $imap->Folder ) );
+    return "$user\@$server/$uidvalidity/";
+}
+
+my $folder_view = change_folder( $imap, 'INBOX' );
+
+$folder_view->display_page;
 
 while (1) {
-
-    $win_index->getyx( my ( $pos_y, $pos_x ) );
-    my $entries = $folder->entries_on_this_page;
 
     my $char = $win_index->getch();
 
     if ( $char eq KEY_DOWN ) {
-        if ( $pos_y < $entries - 1 ) {
-            move_cursor( $win_index, 1 );
-        }
-        elsif ( $pos_y + 1 == $folder->page->entries_per_page ) {
-            $folder->display_next_page;
-        }
+        $folder_view->next_element;
     }
     elsif ( $char eq KEY_UP ) {
-        if ( $pos_y > 0 ) {
-            move_cursor( $win_index, -1 );
-        }
-        elsif ( $pos_y == 0 ) {
-            $folder->display_prev_page;
-        }
+        $folder_view->prev_element;
     }
     elsif ( $char eq KEY_NPAGE ) {
-        $folder->display_next_page;
+        $folder_view->display_next_page;
     }
     elsif ( $char eq KEY_HOME ) {
-        $folder->display_first_page;
+        $folder_view->display_first_page;
     }
     elsif ( $char eq KEY_END ) {
-        $folder->display_last_page;
+        $folder_view->display_last_page;
     }
     elsif ( $char eq KEY_PPAGE ) {
-        $folder->display_prev_page;
+        $folder_view->display_prev_page;
     }
     elsif ( $char eq "\n" ) {
-        my $uid = $folder->current_uid;
+        my $uid = $folder_view->pager->current_element;
         if ( not defined $uid ) {
             boom("Selected mail does not exist on server anymore");
         }
@@ -116,12 +127,8 @@ while (1) {
     }
     elsif ( $char eq 'c' ) {
         my $new_folder = prompt( $win_prompt, "Folder" );
-        $folder = Brieftaube::Folder->new(
-            folder => $new_folder,
-            imap   => $imap,
-            win    => $win_index
-        );
-        $folder->display_page();
+        $folder_view = change_folder( $imap, $new_folder );
+        $folder_view->display_page();
     }
     elsif ( $char eq 'q' ) {
         endwin;
@@ -189,21 +196,34 @@ sub get_type {
     return lc( $part->bodytype . '/' . $part->bodysubtype );
 }
 
+sub get_folder_uids {
+    my ( $imap, $cache ) = shift;
+    return;
+}
+
+sub cache_uids {
+    my ( $cache, $imap, @uids ) = @_;
+    my $prefix = folder_prefix($imap);
+
+    my %keys = map { $_ => 1 } keys %{ $cache->{$prefix} };
+    my @missing_uids;
+    for my $uid (@uids) {
+        if ( not exists $keys{$uid} ) {
+            push @missing_uids, $uid;
+        }
+    }
+    my $body_structures = $imap->fetch_hash( $imap->Range(@missing_uids),
+        'ENVELOPE', 'BODYSTRUCTURE' );
+    for my $uid ( keys %$body_structures ) {
+        $cache->{$prefix}->{$uid} = $body_structures->{$uid};
+
+    }
+    return;
+}
+
 sub boom {
     endwin();
     die @_;
-}
-
-sub move_cursor {
-    my ( $win, $move ) = @_;
-    $win->getyx( my ( $pos_y, $pos_x ) );
-    $win->getmaxyx( my ( $max_y, $max_x ) );
-    my $next_pos = $pos_y + $move;
-    return if $next_pos < 0 || $next_pos > $max_x - 1;
-    $win->chgat( -1, A_NORMAL, 0, 0 );
-    $win->move( $next_pos, 0 );
-    $win->chgat( -1, A_STANDOUT, 0, 0 );
-    return;
 }
 
 sub dd {
