@@ -155,8 +155,11 @@ sub decode_mail {
     my %decoder  = (
         'quoted-printable' => \&decode_qp,
         'base64'           => \&decode_base64,
+        '8bit'             => sub { $_[0] },
+        '7bit'             => sub { $_[0] },
     );
     if ($encoding) {
+        $encoding = lc $encoding;
         if ( exists $decoder{$encoding} ) {
             $body = $decoder{$encoding}->($body);
         }
