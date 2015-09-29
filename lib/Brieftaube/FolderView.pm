@@ -9,6 +9,7 @@ use Encode qw(encode decode);
 use Time::Piece;
 use Date::Parse 'str2time';
 use Curses;
+use Brieftaube::MessageView;
 
 has 'win'          => ( is => 'ro', required => 1 );
 has 'imap'         => ( is => 'ro', required => 1 );
@@ -125,6 +126,20 @@ sub move_cursor {
     $self->win->move( $line, 0 );
     $self->win->chgat( -1, A_STANDOUT, 0, 0 );
     return;
+}
+
+sub display_message {
+	my $self = shift;
+	my $message_view = Brieftaube::MessageView->new(
+		imap => $self->imap,
+		win  => $self->win,
+		pager => $self->pager,
+		cache => $self->cache,
+	);
+
+	$message_view->display;
+	$self->display_page;
+	return;
 }
 
 1;
