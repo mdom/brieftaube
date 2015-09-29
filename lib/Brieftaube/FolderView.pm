@@ -142,4 +142,19 @@ sub display_message {
 	return;
 }
 
+sub handle_input {
+    my ( $self, $char ) = @_;
+    my %key_handler = (
+        KEY_DOWN,  'next_element',      KEY_UP,    'prev_element',
+        KEY_NPAGE, 'display_next_page', KEY_HOME,  'display_first_page',
+        KEY_END,   'display_last_page', KEY_PPAGE, 'display_first_page',
+        "\n",      'display_message',
+    );
+    if ( exists $key_handler{$char} ) {
+	my $method = $key_handler{$char};
+        $self->$method;
+    }
+    return;
+}
+
 1;

@@ -95,37 +95,9 @@ while (1) {
 
     my $char = $win_index->getch();
 
-    if ( $char eq KEY_DOWN ) {
-        $folder_view->next_element;
-    }
-    elsif ( $char eq KEY_UP ) {
-        $folder_view->prev_element;
-    }
-    elsif ( $char eq KEY_NPAGE ) {
-        $folder_view->display_next_page;
-    }
-    elsif ( $char eq KEY_HOME ) {
-        $folder_view->display_first_page;
-    }
-    elsif ( $char eq KEY_END ) {
-        $folder_view->display_last_page;
-    }
-    elsif ( $char eq KEY_PPAGE ) {
-        $folder_view->display_prev_page;
-    }
-    elsif ( $char eq "\n" ) {
-        my $uid = $folder_view->pager->current_element;
-        if ( not defined $uid ) {
-            boom("Selected mail does not exist on server anymore");
-        }
-        my $part      = $imap->get_bodystructure($uid);
-        my $text_part = find_plain_text_part($part);
-        my $body      = decode_mail( $imap, $uid, $text_part );
-        display_mail($body);
-        $win_index->touchwin;
-        $win_index->refresh();
-    }
-    elsif ( $char eq 'c' ) {
+    $folder_view->handle_input($char);
+
+    if ( $char eq 'c' ) {
         my $new_folder = prompt( $win_prompt, "Folder" );
         $folder_view = change_folder( $imap, $new_folder );
         $folder_view->display_page();
