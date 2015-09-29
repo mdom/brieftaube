@@ -139,65 +139,6 @@ while (1) {
 endwin;
 exit 0;
 
-sub find_plain_text_part {
-    my $part = shift;
-    if ( lc( $part->bodytype ) eq 'multipart' ) {
-        my @parts = $part->bodystructure();
-        for my $part (@parts) {
-            if ( get_type($part) eq 'text/plain' ) {
-                return $part;
-            }
-        }
-    }
-    elsif ( get_type($part) eq 'text/plain' ) {
-        return $part;
-    }
-    return;
-}
-
-sub decode_mail {
-    my ( $imap, $uid, $part ) = @_;
-    my $body     = $imap->bodypart_string( $uid, $part->id );
-    my $encoding = $part->bodyenc;
-    my %decoder  = (
-        'quoted-printable' => \&decode_qp,
-        'base64'           => \&decode_base64,
-        '8bit'             => sub { $_[0] },
-        '7bit'             => sub { $_[0] },
-    );
-    if ($encoding) {
-        $encoding = lc $encoding;
-        if ( exists $decoder{$encoding} ) {
-            $body = $decoder{$encoding}->($body);
-        }
-        else {
-            boom("Can't decode mail: Unknown encoding $encoding.\n");
-        }
-    }
-    my $charset = $part->bodyparms->{charset};
-    if ($charset) {
-        $body = decode( $charset, $body );
-    }
-    return $body;
-}
-
-sub display_mail {
-    my $text = shift;
-    $win_mail->erase;
-    $win_mail->scrollok();
-    $text =~ s/\r\n/\n/smxg;
-    $win_mail->addstr( 0, 0, encode( 'utf8', $text ) );
-    $win_mail->refresh();
-    $win_mail->getch();
-    $win_index->touchwin;
-    $win_index->refresh;
-}
-
-sub get_type {
-    my $part = shift;
-    return lc( $part->bodytype . '/' . $part->bodysubtype );
-}
-
 sub get_folder_uids {
     my ( $imap, $cache ) = shift;
     return;
