@@ -85,6 +85,7 @@ $term = Term::ShellUI->new(
         rename  => { proc  => \&rename_folder, minargs => 2, maxargs => 2 },
         copy    => { proc  => \&copy_msg, minargs => 2, maxargs => 2 },
         delete  => { proc  => \&delete, minargs => 1, maxargs => 1 },
+        restore => { proc  => \&restore, minargs => 1, maxargs => 2 },
         expunge => { proc  => \&expunge, minargs => 0, maxargs => 0 },
         sync    => { proc  => \&sync, minargs => 0, maxargs => 0 },
     }
@@ -92,6 +93,16 @@ $term = Term::ShellUI->new(
 
 select_folder('INBOX');
 $term->run;
+
+sub restore {
+    my @uids = get_uids(shift);
+    if (@uids) {
+        $imap->restore_message(@uids)
+          or die "Could not restore_message: $@\n";
+        update_flags(@uids);
+    }
+    return;
+}
 
 sub sync {
     ## TODO checked untagged responses
