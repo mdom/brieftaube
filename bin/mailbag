@@ -17,13 +17,18 @@ use String::Format 'stringf';
 use Date::Parse 'str2time';
 use Time::Piece;
 use open ':locale';
+use Data::Dumper;
+use Term::Size;
 
-my $config_file = "$ENV{HOME}/.brieftauberc";
+my $width = Term::Size::chars;
+
+my $config_file = "$ENV{HOME}/.mailbagrc";
 my $config;
 if ( -e $config_file ) {
     $config = Config::Tiny->read( $config_file, 'utf8' );
-    die "Can't read configuration: " . Config::Tiny->errstr . "\n"
-      if !$config;
+    if ( !$config ) {
+        die "Can't read configuration: " . Config::Tiny->errstr . "\n";
+    }
 }
 my ( $username, $server, $password ) =
   @{ $config->{_} }{qw(username server password)};
@@ -40,7 +45,11 @@ die "Can't connect unless server is supplied.\n"   if !$server;
 die "Can't connect unless username is supplied.\n" if !$username;
 die "Can't connect unless password is supplied.\n" if !$password;
 
-my $imap = Mail::IMAPClient->new(
+## TODO Globals
+
+my ( $imap, @uids, $cache, $term );
+
+$imap = Mail::IMAPClient->new(
     Server   => $server,
     User     => $username,
     Password => $password,
@@ -50,16 +59,14 @@ my $imap = Mail::IMAPClient->new(
 );
 die "Can't connect to imap server: $@\n" if !$imap;
 
-change_folder('INBOX');
-
-my $term = Term::ShellUI->new(
+$term = Term::ShellUI->new(
     prompt   => '> ',
     commands => {
-        list   => { proc => \&display_index },
-        folder => {
+        list   => { proc => \&list },
+        select => {
             maxargs => 1,
             minargs => 1,
-            proc    => \&change_folder,
+            proc    => \&select_folder,
             args    => sub { complete_folders(@_) }
         },
         folders => { maxargs => 0, proc => \&display_folders },
@@ -67,35 +74,135 @@ my $term = Term::ShellUI->new(
             method => sub { shift->exit_requested(1); },
         },
         '' => {
-            proc => sub { print "foo\n" }
+            proc => sub {
+                ## TODO Number shortcut for view number?
+                print "default handler\n";
+            }
         },
-        view => { proc  => \&display_msg },
-        q    => { alias => 'quit' },
+        view    => { proc  => \&display_msg },
+        q       => { alias => 'quit' },
+        create  => { proc  => \&create_folder, minargs => 1, maxargs => 1 },
+        rename  => { proc  => \&rename_folder, minargs => 2, maxargs => 2 },
+        copy    => { proc  => \&copy_msg, minargs => 2, maxargs => 2 },
+        delete  => { proc  => \&delete, minargs => 1, maxargs => 1 },
+        expunge => { proc  => \&expunge, minargs => 0, maxargs => 0 },
+        sync    => { proc  => \&sync, minargs => 0, maxargs => 0 },
     }
 );
 
+select_folder('INBOX');
 $term->run;
 
-my @uids;
+sub sync {
+    ## TODO checked untagged responses
+    delete $cache->{ cache_prefix() };
+}
 
-sub display_index {
-    my $range = shift || '1-16';
-    my ( $from, $to ) = split( /-/, $range, 2 );
-    if ( !defined $to ) {
-        $to = $from + 15;
+sub expunge {
+    $imap->expunge( $imap->Folder ) or die "Could not expunge: $@\n";
+}
+
+sub rename_folder {
+    my ( $oldname, $newname ) = @_;
+    $imap->rename( $oldname, $newname )
+      or die "Could not rename: $@\n";
+    return;
+}
+
+sub delete {
+    my ($what) = @_;
+    if ( $imap->exists($what) ) {
+        $imap->delete($what)
+          or die "Could not delete $what: $@\n";
     }
+    else {
+        my @uids = get_uids($what);
+        if (@uids) {
+            $imap->delete_message( \@uids )
+              or die "Could not delete messages: $@\n";
+            update_flags(@uids);
+        }
+    }
+    return;
+}
 
-    if ( $to > @uids - 1 ) {
+sub create_folder {
+    my $new_folder = shift;
+    $imap->create($new_folder)
+      or die "Could not create $new_folder: $@\n";
+    return;
+}
+
+sub copy_msg {
+    my ( $range, $folder ) = @_;
+    my @uids = get_uids($range);
+    $imap->exists($folder)
+      or $imap->create($folder) && $imap->subscribe($folder);
+    $imap->copy( $folder, \@uids )
+      or die "Could not copy: $@\n";
+    return;
+}
+
+sub get_uids {
+    my $range = shift || '1-16';
+    if ( $range !~ /^\d+-\d+$/ && $range !~ /^\d+$/ ) {
+        die "Must be either a range or a number\n";
+    }
+    my ( $from, $to ) = split( /-/, $range, 2 );
+    if ( !$to ) {
+        return ( $from, $uids[ $from - 1 ] );
+    }
+    if ( $to > @uids ) {
         $to = @uids;
     }
+    return ( $from, @uids[ $from - 1 .. $to - 1 ] );
+}
 
-    my @uids = @uids[ $from - 1 .. $to - 1 ];
-    my $bodystrucs =
-      $imap->fetch_hash( $imap->Range(@uids), 'ENVELOPE', 'BODYSTRUCTURE' );
+sub get_uid {
+    my $num = shift;
+    $uids[ $num - 1 ];
+}
 
-    my $i = $from;
+sub cache_get {
+    my $uid = shift;
+    ## TODO Cache cache_prefix?
+    $cache->{ cache_prefix() }->{$uid};
+}
+
+sub envelope {
+    cache_get(shift)->{ENVELOPE};
+}
+
+sub flags {
+    cache_get(shift)->{FLAGS};
+}
+
+sub list {
+    my @terms = @_;
+    my @search;
+    for my $term (@terms) {
+        if ( $term =~ /^(\d)+$/ ) {
+            push @search, 'UID', $uids[ $1 - 1 ];
+
+        }
+        elsif ( $term =~ /^(\d+)-(\d+)$/ ) {
+            push @search, 'UID', $imap->Range( @uids[ $1 - 1 .. $2 - 1 ] );
+        }
+        else {
+            push @search, $term;
+        }
+    }
+
+    if ( !@search ) {
+        push @search, 'ALL';
+    }
+    @uids = $imap->sort( 'DATE', 'UTF-8', @search );
+
+    fetch_uids(@uids);
+
+    my $i = 1;
     for my $uid (@uids) {
-        print _format_index_line( $bodystrucs->{$uid}->{ENVELOPE}, $i ), "\n";
+        print _format_index_line( $uid, $i ), "\n";
         $i++;
     }
 }
@@ -114,7 +221,10 @@ sub display_folders {
 
 sub _format_index_line {
 
-    my ( $env, $num ) = @_;
+    my ( $uid, $num ) = @_;
+    my $env = envelope($uid);
+    my %flags = map { $_ => 1 } split( ' ', flags($uid) );
+
     $env = Mail::IMAPClient::BodyStructure::Envelope->parse_string($env);
 
     my %header =
@@ -136,24 +246,28 @@ sub _format_index_line {
         Time::Piece->new( str2time( $header{date} ) )->strftime($format);
     };
     $formats{i} = sub { $num };
-    return stringf( "%-5i %-20.20d %-20.20f %-s", %formats );
+    $formats{F} = sub {
+        my %flags = map { $_ => 1 } split( ' ', flags($uid) );
+        my $ret = '';
+        $ret .= !$flags{'\\Seen'}   ? 'N' : ' ';
+        $ret .= $flags{'\\Deleted'} ? 'D' : ' ';
+        $ret .= $flags{'\\Flagged'} ? '!' : ' ';
+        return $ret;
+    };
+    return
+      substr( stringf( "%-5i %F %-20.20d %-20.20f %-s", %formats ), 0, $width );
 }
 
-sub id2uid {
-    my $num = shift;
-    $uids[ $num - 1 ];
-}
-
-sub change_folder {
+sub select_folder {
     my $folder = shift;
-    $imap->select($folder);
-    @uids = $imap->sort( 'DATE', 'UTF-8', 'ALL' );
+    $imap->select($folder)
+      or die "Could not select: $@\n";
     return;
 }
 
 sub display_msg {
     my $num       = shift;
-    my $uid       = id2uid($num);
+    my $uid       = get_uid($num);
     my $part      = $imap->get_bodystructure($uid);
     my $text_part = find_plain_text_part($part);
     my $body      = decode_mail( $uid, $text_part );
@@ -208,11 +322,9 @@ sub get_type {
     return lc( $part->bodytype . '/' . $part->bodysubtype );
 }
 
-my $cache;
-
-sub cache_uids {
-    my ( @uids ) = @_;
-    my $prefix = folder_prefix();
+sub fetch_uids {
+    my (@uids) = @_;
+    my $prefix = cache_prefix();
     my %keys = map { $_ => 1 } keys %{ $cache->{$prefix} };
     my @missing_uids;
     for my $uid (@uids) {
@@ -220,15 +332,27 @@ sub cache_uids {
             push @missing_uids, $uid;
         }
     }
-    my $body_structures = $imap->fetch_hash( $imap->Range(@missing_uids),
-        'ENVELOPE', 'BODYSTRUCTURE' );
-    for my $uid ( keys %$body_structures ) {
-        $cache->{$prefix}->{$uid} = $body_structures->{$uid};
+    if (@missing_uids) {
+        my $msgs = $imap->fetch_hash( $imap->Range(@missing_uids),
+            'ENVELOPE', 'BODYSTRUCTURE', 'FLAGS' );
+        for my $uid ( keys %$msgs ) {
+            $cache->{$prefix}->{$uid} = $msgs->{$uid};
+        }
     }
     return;
 }
 
-sub folder_prefix {
+sub update_flags {
+    my @uids = @_;
+    my $msgs = $imap->fetch_hash( $imap->Range(@uids), 'FLAGS' );
+    for my $uid ( keys %$msgs ) {
+        $cache->{ cache_prefix() }->{$uid}->{FLAGS} = $msgs->{$uid}->{FLAGS};
+    }
+    return;
+
+}
+
+sub cache_prefix {
     my ( $user, $server, $uidvalidity ) =
       ( $imap->User, $imap->Server, $imap->uidvalidity( $imap->Folder ) );
     return "$user\@$server/$uidvalidity/";
