@@ -1,0 +1,237 @@
+#!/usr/bin/perl
+
+package App::mailbag;
+
+use strict;
+use warnings;
+use lib 'lib';
+use Mail::IMAPClient;
+use Mail::IMAPClient::BodyStructure;
+use Encode qw(encode decode);
+use Config::Tiny;
+use MIME::QuotedPrint 'decode_qp';
+use MIME::Base64 'decode_base64';
+use Term::ShellUI;
+use IO::Prompt 'prompt';
+use String::Format 'stringf';
+use Date::Parse 'str2time';
+use Time::Piece;
+use open ':locale';
+
+my $config_file = "$ENV{HOME}/.brieftauberc";
+my $config;
+if ( -e $config_file ) {
+    $config = Config::Tiny->read( $config_file, 'utf8' );
+    die "Can't read configuration: " . Config::Tiny->errstr . "\n"
+      if !$config;
+}
+my ( $username, $server, $password ) =
+  @{ $config->{_} }{qw(username server password)};
+
+if ( not exists $config->{_}->{starttls} and not exists $config->{_}->{ssl} ) {
+    $config->{_}->{starttls} = 1;
+}
+
+$username = prompt('Username: ') if !$username;
+$server   = prompt('Server: ')   if !$server;
+$password = prompt( 'Password: ', -e => '*' ) if !$password;
+
+die "Can't connect unless server is supplied.\n"   if !$server;
+die "Can't connect unless username is supplied.\n" if !$username;
+die "Can't connect unless password is supplied.\n" if !$password;
+
+my $imap = Mail::IMAPClient->new(
+    Server   => $server,
+    User     => $username,
+    Password => $password,
+    Uid      => 1,
+    $config->{_}->{ssl}      ? ( Ssl      => 1 ) : (),
+    $config->{_}->{starttls} ? ( Starttls => 1 ) : (),
+);
+die "Can't connect to imap server: $@\n" if !$imap;
+
+change_folder('INBOX');
+
+my $term = Term::ShellUI->new(
+    prompt   => '> ',
+    commands => {
+        list   => { proc => \&display_index },
+        folder => {
+            maxargs => 1,
+            minargs => 1,
+            proc    => \&change_folder,
+            args    => sub { complete_folders(@_) }
+        },
+        folders => { maxargs => 0, proc => \&display_folders },
+        quit    => {
+            method => sub { shift->exit_requested(1); },
+        },
+        '' => {
+            proc => sub { print "foo\n" }
+        },
+        view => { proc  => \&display_msg },
+        q    => { alias => 'quit' },
+    }
+);
+
+$term->run;
+
+my @uids;
+
+sub display_index {
+    my $range = shift || '1-16';
+    my ( $from, $to ) = split( /-/, $range, 2 );
+    if ( !defined $to ) {
+        $to = $from + 15;
+    }
+
+    if ( $to > @uids - 1 ) {
+        $to = @uids;
+    }
+
+    my @uids = @uids[ $from - 1 .. $to - 1 ];
+    my $bodystrucs =
+      $imap->fetch_hash( $imap->Range(@uids), 'ENVELOPE', 'BODYSTRUCTURE' );
+
+    my $i = $from;
+    for my $uid (@uids) {
+        print _format_index_line( $bodystrucs->{$uid}->{ENVELOPE}, $i ), "\n";
+        $i++;
+    }
+}
+
+sub complete_folders {
+    my ( $self, $cmp ) = @_;
+    return [ grep { index( $_, $cmp->{str} ) == 0 } $imap->subscribed ];
+}
+
+sub display_folders {
+    for my $folder ( $imap->folders ) {
+        print $folder, "\n";
+    }
+    return;
+}
+
+sub _format_index_line {
+
+    my ( $env, $num ) = @_;
+    $env = Mail::IMAPClient::BodyStructure::Envelope->parse_string($env);
+
+    my %header =
+      map { $_ => decode( 'MIME-Header', $env->{$_} ) } qw(subject date);
+
+    # TODO How to encode the string?
+    my $from = $env->{from}->[0];
+    ## TODO should 'NIL' be undef? That seems against the spec
+    $from =
+        $from->personalname ne 'NIL'
+      ? $from->personalname
+      : $from->mailboxname . '@' . $from->hostname;
+    $header{from} = decode( 'MIME-HEADER', $from );
+    $header{subject} = $header{subject} eq 'NIL' ? '' : $header{subject};
+    my %formats =
+      map { lc( substr( $_, 0, 1 ) ) => $header{$_} } keys %header;
+    $formats{d} = sub {
+        my $format = $_[0] || '%F %H:%M';
+        Time::Piece->new( str2time( $header{date} ) )->strftime($format);
+    };
+    $formats{i} = sub { $num };
+    return stringf( "%-5i %-20.20d %-20.20f %-s", %formats );
+}
+
+sub id2uid {
+    my $num = shift;
+    $uids[ $num - 1 ];
+}
+
+sub change_folder {
+    my $folder = shift;
+    $imap->select($folder);
+    @uids = $imap->sort( 'DATE', 'UTF-8', 'ALL' );
+    return;
+}
+
+sub display_msg {
+    my $num       = shift;
+    my $uid       = id2uid($num);
+    my $part      = $imap->get_bodystructure($uid);
+    my $text_part = find_plain_text_part($part);
+    my $body      = decode_mail( $uid, $text_part );
+    $body =~ s/\r\n/\n/smxg;
+    print $body;
+}
+
+sub find_plain_text_part {
+    my ($part) = @_;
+    if ( lc( $part->bodytype ) eq 'multipart' ) {
+        my @parts = $part->bodystructure();
+        for my $part (@parts) {
+            if ( get_type($part) eq 'text/plain' ) {
+                return $part;
+            }
+        }
+    }
+    elsif ( get_type($part) eq 'text/plain' ) {
+        return $part;
+    }
+    return;
+}
+
+sub decode_mail {
+    my ( $uid, $part ) = @_;
+    my $body     = $imap->bodypart_string( $uid, $part->id );
+    my $encoding = $part->bodyenc;
+    my %decoder  = (
+        'quoted-printable' => \&decode_qp,
+        'base64'           => \&decode_base64,
+        '8bit'             => sub { $_[0] },
+        '7bit'             => sub { $_[0] },
+    );
+    if ($encoding) {
+        $encoding = lc $encoding;
+        if ( exists $decoder{$encoding} ) {
+            $body = $decoder{$encoding}->($body);
+        }
+        else {
+            boom("Can't decode mail: Unknown encoding $encoding.\n");
+        }
+    }
+    my $charset = $part->bodyparms->{charset};
+    if ($charset) {
+        $body = decode( $charset, $body );
+    }
+    return $body;
+}
+
+sub get_type {
+    my ($part) = @_;
+    return lc( $part->bodytype . '/' . $part->bodysubtype );
+}
+
+my $cache;
+
+sub cache_uids {
+    my ( @uids ) = @_;
+    my $prefix = folder_prefix();
+    my %keys = map { $_ => 1 } keys %{ $cache->{$prefix} };
+    my @missing_uids;
+    for my $uid (@uids) {
+        if ( not exists $keys{$uid} ) {
+            push @missing_uids, $uid;
+        }
+    }
+    my $body_structures = $imap->fetch_hash( $imap->Range(@missing_uids),
+        'ENVELOPE', 'BODYSTRUCTURE' );
+    for my $uid ( keys %$body_structures ) {
+        $cache->{$prefix}->{$uid} = $body_structures->{$uid};
+    }
+    return;
+}
+
+sub folder_prefix {
+    my ( $user, $server, $uidvalidity ) =
+      ( $imap->User, $imap->Server, $imap->uidvalidity( $imap->Folder ) );
+    return "$user\@$server/$uidvalidity/";
+}
+
+1;
