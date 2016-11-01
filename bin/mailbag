@@ -92,8 +92,13 @@ $term = Term::ShellUI->new(
     }
 );
 
-select_folder('INBOX');
+init();
 $term->run;
+
+sub init {
+    select_folder('INBOX');
+    search('all');
+}
 
 sub restore {
     my @uids = get_uids(shift);
