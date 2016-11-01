@@ -47,7 +47,7 @@ die "Can't connect unless password is supplied.\n" if !$password;
 
 ## TODO Globals
 
-my ( $imap, @uids, $cache, $term );
+my ( $imap, @uids, $cache, $term, $list_start );
 
 $imap = Mail::IMAPClient->new(
     Server   => $server,
@@ -62,7 +62,8 @@ die "Can't connect to imap server: $@\n" if !$imap;
 $term = Term::ShellUI->new(
     prompt   => '> ',
     commands => {
-        list   => { proc => \&list },
+        search => { proc => \&search },
+        list   => { proc => \&current_list },
         select => {
             maxargs => 1,
             minargs => 1,
@@ -188,7 +189,7 @@ sub flags {
     cache_get(shift)->{FLAGS};
 }
 
-sub list {
+sub search {
     my @terms = @_;
     my @search;
     for my $term (@terms) {
@@ -211,7 +212,19 @@ sub list {
 
     fetch_uids(@uids);
 
-    my $i = 1;
+    $list_start = 0;
+    current_list();
+
+}
+
+sub current_list {
+    my $list_end = $list_start + 9;
+    if ( $list_end >= @uids ) {
+        $list_end = @uids - 1;
+
+    }
+    my @uids = @uids[ $list_start .. $list_end ];
+    my $i    = $list_start + 1;
     for my $uid (@uids) {
         print _format_index_line( $uid, $i ), "\n";
         $i++;
