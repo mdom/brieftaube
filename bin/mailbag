@@ -93,6 +93,7 @@ $term = Term::ShellUI->new(
         restore => { proc  => \&restore, minargs => 1, maxargs => 2 },
         expunge => { proc  => \&expunge, minargs => 0, maxargs => 0 },
         sync    => { proc  => \&sync, minargs => 0, maxargs => 0 },
+        set     => { proc  => \&set, minargs => 2 },
     }
 );
 
@@ -102,6 +103,11 @@ $term->run;
 sub init {
     select_folder('INBOX');
     search('all');
+}
+
+sub set {
+	my ($name,@value) = @_;
+	$config->{$name} = $value[0];
 }
 
 sub restore {
