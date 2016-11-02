@@ -22,13 +22,17 @@ use Term::Size;
 
 my $width = Term::Size::chars;
 
+my $config = {
+	sort_order => 'DATE',
+};
+
 my $config_file = "$ENV{HOME}/.mailbagrc";
-my $config;
 if ( -e $config_file ) {
-    $config = Config::Tiny->read( $config_file, 'utf8' );
+    my $config_from_file = Config::Tiny->read( $config_file, 'utf8' );
     if ( !$config ) {
         die "Can't read configuration: " . Config::Tiny->errstr . "\n";
     }
+    $config = { %$config_from_file, %$config };
 }
 my ( $username, $server, $password ) =
   @{ $config->{_} }{qw(username server password)};
@@ -213,7 +217,7 @@ sub search {
     if ( !@search ) {
         push @search, 'ALL';
     }
-    @uids = $imap->sort( 'DATE', 'UTF-8', @search );
+    @uids = $imap->sort( $config->{sort_order}, 'UTF-8', @search );
 
     fetch_uids(@uids);
 
